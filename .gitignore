@@ -1,0 +1,42 @@
+# ============================================================
+# CONDISABOR — .gitignore (raiz del monorepo)
+# ============================================================
+
+# ── Dependencias ─────────────────────────────────────────────
+node_modules/
+
+# ── Variables de entorno (contienen secretos) ────────────────
+.env
+.env.local
+.env.production
+.env.*.local
+# Los .env.example SI se versionan
+!.env.example
+
+# ── Build output ─────────────────────────────────────────────
+frontend/dist/
+
+# ── Logs ─────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+
+# ── OS ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+
+# ── Editores / IDEs ─────────────────────────────────────────
+.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Docker ───────────────────────────────────────────────────
+docker-compose.override.yml
+
+# ── Cursor ───────────────────────────────────────────────────
+.cursor/

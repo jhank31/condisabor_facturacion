@@ -1,0 +1,203 @@
+# ============================================================================
+# CONDISABOR — Docker Compose para Supabase Self-Hosted
+# Basado en la imagen oficial supabase/supabase
+# ============================================================================
+#
+# INSTRUCCIONES:
+# 1. Copiar .env.example a .env y configurar las variables
+# 2. Ejecutar: docker compose up -d
+# 3. Abrir el Studio en: http://localhost:8000
+# 4. Ejecutar las migraciones desde el SQL Editor del Studio
+#
+# ============================================================================
+
+version: "3.8"
+
+services:
+  # ============================================================================
+  # PostgreSQL 15 — Base de datos principal
+  # ============================================================================
+  db:
+    image: supabase/postgres:15.1.1.61
+    container_name: condisabor-db
+    restart: unless-stopped
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXP: ${JWT_EXP:-3600}
+    volumes:
+      - condisabor-db-data:/var/lib/postgresql/data
+      - ./supabase/migrations:/docker-entrypoint-initdb.d/migrations
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # Supabase Studio — Panel de administración web
+  # ============================================================================
+  studio:
+    image: supabase/studio:20240326-5e5586d
+    container_name: condisabor-studio
+    restart: unless-stopped
+    ports:
+      - "${STUDIO_PORT:-8000}:3000"
+    environment:
+      STUDIO_PG_META_URL: http://meta:8080
+      SUPABASE_URL: http://kong:8000
+      SUPABASE_REST_URL: http://kong:8000/rest/v1/
+      SUPABASE_ANON_KEY: ${ANON_KEY}
+      SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
+    depends_on:
+      - meta
+
+  # ============================================================================
+  # Kong — API Gateway
+  # ============================================================================
+  kong:
+    image: kong:2.8.1
+    container_name: condisabor-kong
+    restart: unless-stopped
+    ports:
+      - "${API_EXTERNAL_PORT:-8443}:8443"
+      - "${API_PORT:-8001}:8000"
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /home/kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: request-transformer,cors,key-auth,acl,basic-auth
+      KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
+      KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
+      SUPABASE_ANON_KEY: ${ANON_KEY}
+      SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
+    volumes:
+      - ./volumes/api/kong.yml:/home/kong/kong.yml:ro
+
+  # ============================================================================
+  # GoTrue — Autenticación (Supabase Auth)
+  # ============================================================================
+  auth:
+    image: supabase/gotrue:v2.143.0
+    container_name: condisabor-auth
+    restart: unless-stopped
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: ${API_EXTERNAL_URL:-http://localhost:8001}
+
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-postgres}
+
+      GOTRUE_SITE_URL: ${SITE_URL:-http://localhost:3000}
+      GOTRUE_URI_ALLOW_LIST: ${ADDITIONAL_REDIRECT_URLS:-}
+      GOTRUE_DISABLE_SIGNUP: ${DISABLE_SIGNUP:-true}
+
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: ${JWT_EXP:-3600}
+      GOTRUE_JWT_SECRET: ${JWT_SECRET}
+
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: true
+      GOTRUE_MAILER_AUTOCONFIRM: true
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ============================================================================
+  # PostgREST — API REST automática
+  # ============================================================================
+  rest:
+    image: postgrest/postgrest:v12.0.1
+    container_name: condisabor-rest
+    restart: unless-stopped
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-postgres}
+      PGRST_DB_SCHEMAS: public,storage,graphql_public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_APP_SETTINGS_JWT_SECRET: ${JWT_SECRET}
+      PGRST_APP_SETTINGS_JWT_EXP: ${JWT_EXP:-3600}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ============================================================================
+  # Realtime — Cambios en tiempo real via WebSocket
+  # ============================================================================
+  realtime:
+    image: supabase/realtime:v2.27.5
+    container_name: condisabor-realtime
+    restart: unless-stopped
+    environment:
+      PORT: 4000
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: supabase_admin
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: ${POSTGRES_DB:-postgres}
+      DB_AFTER_CONNECT_QUERY: "SET search_path TO _realtime"
+      DB_ENC_KEY: supabaserealtime
+      API_JWT_SECRET: ${JWT_SECRET}
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:-supersecretkeythatislongenough1234567890}
+      ERL_AFLAGS: -proto_dist inet_tcp
+      DNS_NODES: "''"
+      RLIMIT_NOFILE: 10000
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ============================================================================
+  # Storage — Almacenamiento de archivos (S3 compatible)
+  # ============================================================================
+  storage:
+    image: supabase/storage-api:v0.46.4
+    container_name: condisabor-storage
+    restart: unless-stopped
+    environment:
+      ANON_KEY: ${ANON_KEY}
+      SERVICE_KEY: ${SERVICE_ROLE_KEY}
+      POSTGREST_URL: http://rest:3000
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+      DATABASE_URL: postgres://supabase_storage_admin:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-postgres}
+      FILE_SIZE_LIMIT: 52428800
+      STORAGE_BACKEND: file
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+      REGION: us-east-1
+      GLOBAL_S3_BUCKET: stub
+    volumes:
+      - condisabor-storage-data:/var/lib/storage
+    depends_on:
+      db:
+        condition: service_healthy
+      rest:
+        condition: service_started
+
+  # ============================================================================
+  # Meta — Postgres Meta para Studio
+  # ============================================================================
+  meta:
+    image: supabase/postgres-meta:v0.80.0
+    container_name: condisabor-meta
+    restart: unless-stopped
+    environment:
+      PG_META_PORT: 8080
+      PG_META_DB_HOST: db
+      PG_META_DB_PORT: 5432
+      PG_META_DB_NAME: ${POSTGRES_DB:-postgres}
+      PG_META_DB_USER: supabase_admin
+      PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  condisabor-db-data:
+    driver: local
+  condisabor-storage-data:
+    driver: local

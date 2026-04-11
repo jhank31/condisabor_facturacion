@@ -1,338 +1,171 @@
-# Condisabor — Guia Completa de Despliegue en VPS Windows
+# Condisabor — Guia de Despliegue en la Nube
 
 > **Proyecto:** Dashboard de Gestion de Cartera y Cobros
-> **Stack:** React 18 + Express + Supabase Cloud + Docker
+> **Stack:** React 18 (Vercel) + Express (Render) + Supabase Cloud
+> **Costo mensual:** $0 (tier gratuito de los 3 servicios)
 > **Ultima actualizacion:** Abril 2026
 
 ---
 
 ## Indice
 
-1. [Requisitos del VPS](#1-requisitos-del-vps)
-2. [Instalar software en el VPS](#2-instalar-software-en-el-vps)
-3. [Clonar el repositorio](#3-clonar-el-repositorio)
-4. [Estructura del proyecto](#4-estructura-del-proyecto)
-5. [Configurar variables de entorno](#5-configurar-variables-de-entorno)
-6. [Construir y levantar los contenedores](#6-construir-y-levantar-los-contenedores)
+1. [Arquitectura general](#1-arquitectura-general)
+2. [Prerequisitos](#2-prerequisitos)
+3. [Paso 1 — Supabase Cloud](#3-paso-1--supabase-cloud)
+4. [Paso 2 — Backend en Render](#4-paso-2--backend-en-render)
+5. [Paso 3 — Frontend en Vercel](#5-paso-3--frontend-en-vercel)
+6. [Paso 4 — Conectar todo](#6-paso-4--conectar-todo)
 7. [Verificar que todo funciona](#7-verificar-que-todo-funciona)
-8. [Acceder al sistema](#8-acceder-al-sistema)
-9. [Como hacer actualizaciones remotamente](#9-como-hacer-actualizaciones-remotamente)
-10. [Comandos de administracion](#10-comandos-de-administracion)
-11. [Inicio automatico con Windows](#11-inicio-automatico-con-windows)
-12. [Solucion de problemas](#12-solucion-de-problemas)
-13. [Arquitectura de red](#13-arquitectura-de-red)
+8. [Como hacer actualizaciones](#8-como-hacer-actualizaciones)
+9. [Variables de entorno — Resumen completo](#9-variables-de-entorno--resumen-completo)
+10. [Desarrollo local](#10-desarrollo-local)
+11. [Solucion de problemas](#11-solucion-de-problemas)
+12. [Limites del tier gratuito](#12-limites-del-tier-gratuito)
 
 ---
 
-## 1. Requisitos del VPS
+## 1. Arquitectura general
 
-| Requisito | Minimo | Tu VPS |
-|-----------|--------|--------|
-| RAM | 4 GB | 16 GB (sobra) |
-| Disco | 10 GB libres | Verificar |
-| SO | Windows Server 2019+ o Windows 10/11 Pro | - |
-| Red | Acceso a internet (para descargar imagenes Docker) | Via VPN |
-| Puerto 80 | Libre (no IIS ni otro web server) | Verificar |
+```
+Empleado (navegador)
+       │
+       │  https://condisabor.vercel.app
+       ▼
+┌─────────────────┐
+│     VERCEL      │
+│  Frontend React │
+│  (SPA estatica) │
+└────────┬────────┘
+         │  https://condisabor-backend.onrender.com/api/*
+         ▼
+┌─────────────────┐
+│     RENDER      │
+│  Backend Express│
+│  (Node.js API)  │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  SUPABASE CLOUD │
+│  PostgreSQL     │
+│  Auth (GoTrue)  │
+│  Storage        │
+└─────────────────┘
+```
+
+> **Nota sobre cold starts:** En el tier gratuito de Render, el backend se apaga tras 15 minutos
+> sin trafico. La primera peticion despues de eso tarda ~30-50 segundos mientras el servidor
+> se despierta. Las siguientes peticiones son instantaneas. Esto solo afecta al primer
+> empleado que abre el dashboard tras un periodo de inactividad.
+
+**Ventajas de esta arquitectura:**
+- Deploys automaticos con `git push` (sin tocar servidores)
+- HTTPS gratuito en todos los servicios
+- Sin Docker, sin servidores, sin VPN
+- Accesible desde cualquier lugar con internet
+- Escala automaticamente si crece el uso
 
 ---
 
-## 2. Instalar software en el VPS
+## 2. Prerequisitos
 
-Conectate al VPS por **Escritorio Remoto (RDP)** a traves de la VPN y ejecuta todo en **PowerShell como Administrador**.
+Antes de empezar necesitas:
 
-### 2.1 — Instalar Git
-
-Descarga e instala desde: https://git-scm.com/download/win
-
-Verifica la instalacion:
-
-```powershell
-git --version
-```
-
-Debe mostrar algo como `git version 2.4x.x`.
-
-### 2.2 — Instalar Docker Desktop
-
-Descarga desde: https://www.docker.com/products/docker-desktop/
-
-Durante la instalacion:
-- Marca la opcion **"Use WSL 2 instead of Hyper-V"** (recomendado)
-- Reinicia el VPS si lo pide
-
-Despues de reiniciar, abre Docker Desktop y espera a que el icono de la ballena en la barra de tareas quede **estable** (sin animacion).
-
-Verifica la instalacion:
-
-```powershell
-docker --version
-docker compose version
-```
-
-Ambos comandos deben responder con su version.
-
-> **Importante:** Docker Desktop necesita una sesion de Windows activa para correr.
-> Si el VPS reinicia y nadie hace login, Docker no arranca.
-> En la seccion 11 se explica como resolver esto.
+- [ ] Una cuenta en **GitHub** con el repositorio del proyecto subido
+- [ ] Una cuenta en **Supabase** (https://supabase.com) — ya la tienes si el proyecto esta funcionando
+- [ ] Una cuenta en **Vercel** (https://vercel.com) — registro gratis con GitHub
+- [ ] Una cuenta en **Render** (https://render.com) — registro gratis con GitHub (sin tarjeta de credito)
 
 ---
 
-## 3. Clonar el repositorio
+## 3. Paso 1 — Supabase Cloud
 
-```powershell
-# Elegir donde guardar el proyecto
-cd C:\
+Si ya tienes el proyecto de Supabase configurado con las tablas, auth y storage, **no necesitas hacer nada aqui**. Solo necesitas tener a mano las credenciales.
 
-# Clonar el repo (reemplazar con tu URL real)
-git clone https://github.com/TU-USUARIO/condisabor.git
-
-# Entrar a la carpeta del proyecto
-cd C:\condisabor
-```
-
-Despues de clonar, la estructura en el VPS sera:
-
-```
-C:\condisabor\
-├── backend\
-├── frontend\
-├── docker-compose.prod.yml
-├── .env.example
-└── README_DEPLOY.md         ← este archivo
-```
-
----
-
-## 4. Estructura del proyecto
-
-```
-C:\condisabor\
-│
-├── docker-compose.prod.yml     ← orquesta los 2 contenedores
-│
-├── .env.example                ← plantilla de variables para Supabase self-hosted (NO se usa en produccion cloud)
-│
-├── backend\
-│   ├── Dockerfile              ← imagen Docker del backend
-│   ├── .env.example            ← plantilla de variables del backend
-│   ├── .env                    ← ⚠️ CREAR ESTE ARCHIVO (paso 5.1)
-│   ├── package.json
-│   └── src\                    ← codigo fuente del API
-│       ├── server.js
-│       ├── app.js
-│       ├── config\
-│       ├── controllers\
-│       ├── middleware\
-│       ├── routes\
-│       ├── validators\
-│       └── jobs\
-│
-└── frontend\
-    ├── Dockerfile              ← imagen Docker del frontend
-    ├── nginx.conf              ← configuracion de Nginx (proxy + SPA)
-    ├── .env.example            ← plantilla de variables del frontend
-    ├── package.json
-    ├── index.html
-    └── src\                    ← codigo fuente React
-        ├── App.jsx
-        ├── main.jsx
-        ├── components\
-        ├── contexts\
-        ├── hooks\
-        ├── lib\
-        ├── pages\
-        ├── router\
-        └── utils\
-```
-
----
-
-## 5. Configurar variables de entorno
-
-Hay **2 archivos** que debes crear manualmente en el VPS. **Nunca** deben subirse al repositorio.
-
-### 5.1 — Backend: `C:\condisabor\backend\.env`
-
-Este archivo contiene las credenciales del API. El backend lo lee al arrancar.
-
-```powershell
-# Copiar la plantilla
-Copy-Item C:\condisabor\backend\.env.example C:\condisabor\backend\.env
-
-# Abrir para editar
-notepad C:\condisabor\backend\.env
-```
-
-Contenido que debe tener (reemplaza los valores entre `<>`):
-
-```env
-# ── Servidor ──────────────────────────────────────────────
-PORT=3000
-NODE_ENV=production
-
-# ── Supabase ──────────────────────────────────────────────
-# Obtenlos en: https://supabase.com/dashboard
-# → Tu proyecto → Project Settings → API
-SUPABASE_URL=https://<tu-project-id>.supabase.co
-SUPABASE_ANON_KEY=<tu-anon-key>
-SUPABASE_SERVICE_ROLE_KEY=<tu-service-role-key>
-
-# ── CORS ──────────────────────────────────────────────────
-# La IP privada del VPS en la red VPN.
-# Ejemplo: si el VPS tiene IP 192.168.1.50 en la VPN:
-ALLOWED_ORIGINS=http://192.168.1.50
-
-# ── Seguridad HTTPS ──────────────────────────────────────
-# false porque en red VPN interna no hay certificado SSL.
-FORCE_HTTPS=false
-
-# ── Rate limiting ────────────────────────────────────────
-RATE_LIMIT_WINDOW_MS=900000
-RATE_LIMIT_MAX=100
-
-# ── Cron jobs ────────────────────────────────────────────
-# true = al arrancar, marca facturas vencidas automaticamente
-RUN_CRON_ON_START=false
-```
-
-#### Donde conseguir los valores de Supabase
+### Obtener las credenciales
 
 1. Ve a https://supabase.com/dashboard
 2. Selecciona tu proyecto **Condisabor**
 3. Menu lateral → **Project Settings** (icono de engranaje)
 4. Seccion **API**
-5. Ahi encontraras:
-   - **Project URL** → es tu `SUPABASE_URL`
-   - **anon public** → es tu `SUPABASE_ANON_KEY`
-   - **service_role** (click en "Reveal") → es tu `SUPABASE_SERVICE_ROLE_KEY`
 
-#### Como saber la IP del VPS
+Anota estos 3 valores:
 
-En PowerShell del VPS:
+| Variable | Donde la encuentras | Para que se usa |
+|----------|-------------------|-----------------|
+| **Project URL** | API → Project URL | `SUPABASE_URL` (backend) y `VITE_SUPABASE_URL` (frontend) |
+| **anon public** | API → Project API keys → anon public | `SUPABASE_ANON_KEY` (backend) y `VITE_SUPABASE_ANON_KEY` (frontend) |
+| **service_role** | API → Project API keys → service_role (click "Reveal") | `SUPABASE_SERVICE_ROLE_KEY` (solo backend) |
 
-```powershell
-ipconfig
-```
-
-Busca el adaptador de red de la VPN. La **IPv4 Address** es la que usaras en `ALLOWED_ORIGINS`.
+> **Importante:** El `service_role` key tiene permisos totales sobre la base de datos.
+> Solo va en el backend (Render). **NUNCA** lo pongas en el frontend.
 
 ---
 
-### 5.2 — Raiz del proyecto: `C:\condisabor\.env`
+## 4. Paso 2 — Backend en Render
 
-Este archivo lo lee `docker-compose.prod.yml` para pasarle las variables de Supabase al **build** del frontend. Vite las embebe en el JavaScript durante la compilacion.
+### 4.1 — Crear el servicio
 
-```powershell
-# Crear el archivo en la raiz del proyecto
-notepad C:\condisabor\.env
-```
+1. Ve a https://dashboard.render.com
+2. Click en **New** → **Web Service**
+3. Selecciona **Build and deploy from a Git repository** → **Next**
+4. Conecta tu cuenta de GitHub si es la primera vez
+5. Busca y selecciona el repositorio `condisabor` → **Connect**
 
-Contenido (usa los **mismos** valores de SUPABASE_URL y ANON_KEY del paso anterior):
+### 4.2 — Configurar el servicio
 
-```env
-VITE_SUPABASE_URL=https://<tu-project-id>.supabase.co
-VITE_SUPABASE_ANON_KEY=<tu-anon-key>
-```
+| Campo | Valor |
+|-------|-------|
+| **Name** | `condisabor-backend` |
+| **Region** | Oregon (US West) o el mas cercano a tus usuarios |
+| **Branch** | `main` (o la rama que uses para produccion) |
+| **Root Directory** | `backend` |
+| **Runtime** | Node |
+| **Build Command** | `npm install` |
+| **Start Command** | `node src/server.js` |
+| **Instance Type** | **Free** |
 
-> **Nota:** Este `.env` de raiz solo tiene 2 variables. NO pongas el `SERVICE_ROLE_KEY` aqui,
-> porque se embeberia en el JavaScript del frontend y cualquiera podria verlo.
+### 4.3 — Configurar variables de entorno
 
----
+Baja hasta la seccion **Environment Variables** y click en **Add Environment Variable** para cada una:
 
-### 5.3 — Resumen de archivos `.env`
+| Variable | Valor |
+|----------|-------|
+| `PORT` | `3000` |
+| `NODE_ENV` | `production` |
+| `SUPABASE_URL` | `https://<tu-project-id>.supabase.co` |
+| `SUPABASE_ANON_KEY` | `<tu-anon-key>` |
+| `SUPABASE_SERVICE_ROLE_KEY` | `<tu-service-role-key>` |
+| `ALLOWED_ORIGINS` | `https://condisabor.vercel.app` |
+| `FORCE_HTTPS` | `true` |
+| `RATE_LIMIT_WINDOW_MS` | `900000` |
+| `RATE_LIMIT_MAX` | `100` |
+| `RUN_CRON_ON_START` | `false` |
 
-| Archivo | Ruta completa en el VPS | Que contiene | Quien lo lee |
-|---------|------------------------|--------------|--------------|
-| Backend `.env` | `C:\condisabor\backend\.env` | Credenciales del API, CORS, rate limits | El contenedor `backend` en runtime |
-| Raiz `.env` | `C:\condisabor\.env` | `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` | `docker compose` durante el **build** del frontend |
+> **Nota sobre ALLOWED_ORIGINS:** Pon aqui el dominio exacto que Vercel te asigne.
+> Si no sabes cual sera, primero despliega el frontend (paso 5) y vuelve a editar esta variable.
+> Puedes poner multiples origenes separados por coma:
+> `https://condisabor.vercel.app,https://condisabor-tu-usuario.vercel.app`
 
-**No existe** un `.env` dentro de `frontend\` en produccion. Las variables del frontend se pasan como build args de Docker.
+### 4.4 — Desplegar
 
----
+Click en **Create Web Service**. Render va a:
+1. Clonar tu repo
+2. Entrar a la carpeta `backend`
+3. Ejecutar `npm install`
+4. Ejecutar `node src/server.js`
+5. Asignarte una URL como: `https://condisabor-backend.onrender.com`
 
-## 6. Construir y levantar los contenedores
+**Anota esta URL** — la necesitas para el frontend.
 
-Asegurate de estar en la carpeta del proyecto:
+> El primer deploy tarda 2-3 minutos. Puedes ver el progreso en los logs de Render.
 
-```powershell
-cd C:\condisabor
-```
+### 4.5 — Verificar
 
-Ejecuta el build y arranque:
-
-```powershell
-docker compose -f docker-compose.prod.yml up -d --build
-```
-
-Este comando hace lo siguiente (puede tardar 2-5 minutos la primera vez):
-
-1. **Construye la imagen del backend:**
-   - Instala dependencias de Node.js (solo produccion)
-   - Copia el codigo fuente
-   - Expone el puerto 3000 internamente
-
-2. **Construye la imagen del frontend:**
-   - Instala dependencias de Node.js
-   - Ejecuta `npm run build` (Vite compila React + embebe las variables `VITE_*`)
-   - Copia los archivos estaticos a Nginx
-   - Configura Nginx como proxy reverso
-
-3. **Levanta ambos contenedores:**
-   - `condisabor-backend` en la red interna (puerto 3000, NO expuesto)
-   - `condisabor-frontend` en el puerto **80** (accesible desde la VPN)
-
-4. **El frontend espera** a que el backend este `healthy` antes de arrancar.
-
----
-
-## 7. Verificar que todo funciona
-
-### 7.1 — Ver el estado de los contenedores
-
-```powershell
-docker compose -f docker-compose.prod.yml ps
-```
-
-Debes ver algo asi:
+Abre en tu navegador:
 
 ```
-NAME                    STATUS              PORTS
-condisabor-backend      Up (healthy)        3000/tcp
-condisabor-frontend     Up (healthy)        0.0.0.0:80->80/tcp
-```
-
-Ambos deben decir **Up (healthy)**. Si uno dice `starting` o `unhealthy`, espera 30 segundos y vuelve a verificar.
-
-### 7.2 — Ver los logs en tiempo real
-
-```powershell
-# Logs de ambos servicios
-docker compose -f docker-compose.prod.yml logs -f
-
-# Solo backend
-docker compose -f docker-compose.prod.yml logs -f backend
-
-# Solo frontend
-docker compose -f docker-compose.prod.yml logs -f frontend
-```
-
-Presiona `Ctrl+C` para salir de los logs.
-
-El backend debe mostrar:
-
-```
-╔═══════════════════════════════════════════╗
-║   CONDISABOR API — Gestión de Cartera     ║
-╚═══════════════════════════════════════════╝
- Servidor corriendo en http://localhost:3000
- Entorno: production
- Supabase: https://xxxxx.supabase.co
-```
-
-### 7.3 — Probar el health check del backend manualmente
-
-```powershell
-docker exec condisabor-backend wget -qO- http://localhost:3000/health
+https://condisabor-backend.onrender.com/health
 ```
 
 Debe responder:
@@ -341,334 +174,287 @@ Debe responder:
 {"status":"ok","service":"CONDISABOR API","version":"1.0.0","timestamp":"..."}
 ```
 
----
-
-## 8. Acceder al sistema
-
-Desde cualquier **PC conectado a la VPN**, abre un navegador y ve a:
-
-```
-http://<IP-del-VPS>
-```
-
-Por ejemplo, si la IP del VPS en la VPN es `192.168.1.50`:
-
-```
-http://192.168.1.50
-```
-
-El flujo de red es:
-
-```
-Tu PC (en la VPN)
-  │
-  ├─ http://192.168.1.50          → Nginx sirve el frontend (React)
-  │
-  └─ http://192.168.1.50/api/*    → Nginx reenvía al backend (Express)
-                                     internamente a backend:3000
-```
-
-| Servicio | Puerto interno | Puerto expuesto | Acceso |
-|----------|----------------|-----------------|--------|
-| Frontend (Nginx) | 80 | **80** | Desde la VPN |
-| Backend (Node.js) | 3000 | **No expuesto** | Solo via Nginx |
+> Si tarda unos segundos en responder, es normal — el servicio puede estar despertandose (cold start).
 
 ---
 
-## 9. Como hacer actualizaciones remotamente
+## 5. Paso 3 — Frontend en Vercel
 
-### Flujo normal (sin ir a la empresa)
+### 5.1 — Crear el proyecto
 
-1. **En tu maquina local**, haces cambios y los subes:
+1. Ve a https://vercel.com/dashboard
+2. Click en **Add New → Project**
+3. Selecciona **Import Git Repository**
+4. Busca y selecciona el repositorio `condisabor`
+
+### 5.2 — Configurar el build
+
+| Campo | Valor |
+|-------|-------|
+| **Framework Preset** | Vite |
+| **Root Directory** | `frontend` (click en "Edit" para cambiarlo) |
+| **Build Command** | `npm run build` (Vercel lo detecta automaticamente) |
+| **Output Directory** | `dist` (Vercel lo detecta automaticamente) |
+
+### 5.3 — Configurar variables de entorno
+
+En la seccion **Environment Variables**, agrega:
+
+| Variable | Valor |
+|----------|-------|
+| `VITE_SUPABASE_URL` | `https://<tu-project-id>.supabase.co` |
+| `VITE_SUPABASE_ANON_KEY` | `<tu-anon-key>` |
+| `VITE_API_URL` | `https://condisabor-backend.onrender.com` |
+
+> **VITE_API_URL** es la URL que Render te asigno en el paso 4.4.
+> **SIN** barra al final. Correcto: `https://xxx.onrender.com` — Incorrecto: `https://xxx.onrender.com/`
+
+### 5.4 — Desplegar
+
+Click en **Deploy**. Vercel va a:
+1. Clonar tu repo
+2. Entrar a la carpeta `frontend`
+3. Ejecutar `npm install && npm run build` (embebiendo las variables `VITE_*` en el JavaScript)
+4. Publicar los archivos estaticos en su CDN global
+
+Te asignara una URL como: `https://condisabor.vercel.app`
+
+---
+
+## 6. Paso 4 — Conectar todo
+
+Despues de desplegar ambos servicios, necesitas verificar que las URLs coincidan:
+
+### 6.1 — Verificar CORS en Render
+
+El dominio que Vercel te asigno debe estar en `ALLOWED_ORIGINS` del backend.
+
+1. Ve a https://dashboard.render.com → tu servicio `condisabor-backend`
+2. **Environment** (menu lateral)
+3. Verifica que `ALLOWED_ORIGINS` tenga el dominio exacto de Vercel
+
+Ejemplo:
+
+```
+ALLOWED_ORIGINS=https://condisabor.vercel.app
+```
+
+Si Vercel te dio un dominio distinto (como `condisabor-tu-usuario.vercel.app`), actualizalo.
+
+### 6.2 — Verificar API URL en Vercel
+
+1. Ve a https://vercel.com → tu proyecto
+2. **Settings** → **Environment Variables**
+3. Verifica que `VITE_API_URL` tenga la URL exacta de Render
+
+> **Si cambias una variable en Vercel, debes re-desplegar** porque Vite las embebe en build time.
+> Ve a **Deployments** → click en los 3 puntos del ultimo deploy → **Redeploy**.
+
+---
+
+## 7. Verificar que todo funciona
+
+### 7.1 — Backend (Render)
+
+Abre en tu navegador:
+
+```
+https://condisabor-backend.onrender.com/health
+```
+
+Respuesta esperada (puede tardar ~30 seg si el servicio estaba dormido):
+```json
+{"status":"ok","service":"CONDISABOR API","version":"1.0.0"}
+```
+
+### 7.2 — Frontend (Vercel)
+
+Abre en tu navegador:
+
+```
+https://condisabor.vercel.app
+```
+
+Debe cargar la pagina de login.
+
+### 7.3 — Conexion completa
+
+1. Haz login con un usuario existente
+2. Verifica que el dashboard cargue datos
+3. Prueba crear/editar una factura
+4. Abre la consola del navegador (F12 → Console) y verifica que no haya errores de CORS
+
+**Si hay errores de CORS**, revisa:
+- Que `ALLOWED_ORIGINS` en Render tenga el dominio exacto de Vercel (con `https://`)
+- Que `VITE_API_URL` en Vercel tenga la URL exacta de Render (sin `/` al final)
+
+---
+
+## 8. Como hacer actualizaciones
+
+### Deploy automatico (recomendado)
+
+Tanto Vercel como Render hacen deploy automaticamente cuando haces `git push` a la rama `main`:
 
 ```bash
+# En tu maquina local
 git add .
 git commit -m "descripcion del cambio"
 git push
 ```
 
-2. **Te conectas al VPS por Escritorio Remoto (RDP)** a traves de la VPN.
+Eso es todo. En 1-2 minutos ambos servicios se actualizan automaticamente.
 
-3. **En PowerShell del VPS**, ejecutas:
+### Deploy manual (si necesitas forzarlo)
 
-```powershell
-cd C:\condisabor
+**Vercel:**
+1. Dashboard → Deployments → Redeploy
 
-# Descargar los ultimos cambios
-git pull
-
-# Reconstruir y reiniciar (sin downtime prolongado)
-docker compose -f docker-compose.prod.yml up -d --build
-
-# Limpiar imagenes viejas para liberar disco
-docker image prune -f
-```
-
-Eso es todo. En 2-3 minutos el sistema esta actualizado.
-
-### Script automatico (opcional)
-
-Puedes crear un script para simplificarlo. Crea el archivo `C:\condisabor\deploy.ps1`:
-
-```powershell
-Set-Location C:\condisabor
-Write-Host "Descargando ultimos cambios..." -ForegroundColor Cyan
-git pull
-Write-Host "Reconstruyendo contenedores..." -ForegroundColor Cyan
-docker compose -f docker-compose.prod.yml up -d --build
-Write-Host "Limpiando imagenes antiguas..." -ForegroundColor Cyan
-docker image prune -f
-Write-Host "Deploy completado." -ForegroundColor Green
-docker compose -f docker-compose.prod.yml ps
-```
-
-Para ejecutarlo:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File C:\condisabor\deploy.ps1
-```
+**Render:**
+1. Dashboard → tu servicio → **Manual Deploy** → **Deploy latest commit**
 
 ---
 
-## 10. Comandos de administracion
+## 9. Variables de entorno — Resumen completo
 
-Todos los comandos se ejecutan desde `C:\condisabor` en PowerShell.
+### En Render (backend)
 
-### Detener el sistema
+| Variable | Valor | Ejemplo |
+|----------|-------|---------|
+| `PORT` | Puerto del servidor | `3000` |
+| `NODE_ENV` | Entorno | `production` |
+| `SUPABASE_URL` | URL del proyecto Supabase | `https://abcdef.supabase.co` |
+| `SUPABASE_ANON_KEY` | Clave publica de Supabase | `sb_publishable_...` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Clave secreta de Supabase | `sb_secret_...` |
+| `ALLOWED_ORIGINS` | Dominio del frontend en Vercel | `https://condisabor.vercel.app` |
+| `FORCE_HTTPS` | Forzar HTTPS | `true` |
+| `RATE_LIMIT_WINDOW_MS` | Ventana de rate limit (ms) | `900000` |
+| `RATE_LIMIT_MAX` | Max requests por ventana | `100` |
+| `RUN_CRON_ON_START` | Ejecutar cron al arrancar | `false` |
 
-```powershell
-docker compose -f docker-compose.prod.yml down
-```
+### En Vercel (frontend)
 
-### Reiniciar un servicio especifico
+| Variable | Valor | Ejemplo |
+|----------|-------|---------|
+| `VITE_SUPABASE_URL` | URL del proyecto Supabase | `https://abcdef.supabase.co` |
+| `VITE_SUPABASE_ANON_KEY` | Clave publica de Supabase | `sb_publishable_...` |
+| `VITE_API_URL` | URL del backend en Render | `https://condisabor-backend.onrender.com` |
 
-```powershell
-# Solo el backend
-docker compose -f docker-compose.prod.yml restart backend
-
-# Solo el frontend
-docker compose -f docker-compose.prod.yml restart frontend
-```
-
-### Ver uso de recursos (CPU, RAM)
-
-```powershell
-docker stats condisabor-backend condisabor-frontend
-```
-
-### Ver los ultimos 100 logs del backend
-
-```powershell
-docker logs --tail 100 condisabor-backend
-```
-
-### Entrar al contenedor del backend (debug)
-
-```powershell
-docker exec -it condisabor-backend sh
-```
-
-### Reconstruir todo desde cero
-
-```powershell
-docker compose -f docker-compose.prod.yml down
-docker rmi condisabor-frontend condisabor-backend
-docker compose -f docker-compose.prod.yml up -d --build
-```
+> **Recordatorio:** Las variables `VITE_*` se embeben en el JavaScript durante el build.
+> Si las cambias en Vercel, debes hacer un **Redeploy** para que apliquen.
 
 ---
 
-## 11. Inicio automatico con Windows
+## 10. Desarrollo local
 
-### Problema
+Para trabajar localmente, el setup no cambia. El proxy de Vite sigue funcionando:
 
-Docker Desktop necesita una sesion activa. Si el VPS reinicia y nadie hace login, Docker no arranca y el sistema queda caido.
+```bash
+# Terminal 1 — Backend
+cd backend
+cp .env.example .env   # solo la primera vez, completar los valores
+npm install
+npm run dev
 
-### Solucion A — Auto-login + Docker Desktop al inicio (simple)
-
-1. En Docker Desktop → **Settings** → **General**:
-   - Activar **"Start Docker Desktop when you sign in to your computer"**
-
-2. Configurar auto-login en Windows:
-
-```powershell
-# Abrir la configuracion de auto-login
-netplwiz
+# Terminal 2 — Frontend
+cd frontend
+npm install
+npm run dev
 ```
 
-   - Desmarca **"Users must enter a user name and password to use this computer"**
-   - Selecciona tu usuario y haz click en Apply
-   - Ingresa la contraseña cuando lo pida
-
-3. Los contenedores tienen `restart: unless-stopped` en el compose, asi que Docker los levantara automaticamente al arrancar.
-
-### Solucion B — Docker Engine como servicio de Windows (robusta)
-
-Si el VPS es Windows Server, puedes instalar Docker Engine (sin Desktop) que corre como servicio:
-
-https://docs.docker.com/engine/install/windows-server/
-
-Con esto, Docker arranca con Windows aunque nadie haga login.
+En desarrollo local:
+- `VITE_API_URL` **no se define** (o queda vacio)
+- Las peticiones `/api/*` las proxea Vite a `localhost:3000` automaticamente
+- No necesitas Render ni Vercel para desarrollar
 
 ---
 
-## 12. Solucion de problemas
+## 11. Solucion de problemas
 
-### El frontend no carga en el navegador
+### Error CORS en la consola del navegador
 
-```powershell
-# 1. Verificar que los contenedores esten corriendo
-docker ps
-
-# 2. Ver errores de Nginx
-docker logs condisabor-frontend
-
-# 3. Verificar que el puerto 80 este libre
-netstat -ano | findstr :80
+```
+Access to XMLHttpRequest at 'https://xxx.onrender.com/api/...'
+from origin 'https://condisabor.vercel.app' has been blocked by CORS policy
 ```
 
-Si otro programa usa el puerto 80 (como IIS):
+**Causa:** El dominio del frontend no esta en `ALLOWED_ORIGINS` del backend.
 
-```powershell
-# Ver que proceso usa el puerto 80
-netstat -ano | findstr :80
+**Solucion:**
+1. Ve a Render → tu servicio → **Environment**
+2. Actualiza `ALLOWED_ORIGINS` con el dominio exacto de Vercel
+3. Click en **Save Changes** → Render redespliega automaticamente
 
-# Detener IIS si esta corriendo
-iisreset /stop
-```
+### El frontend carga pero no muestra datos
 
-### El backend no responde (frontend muestra errores de red)
+**Causa probable:** `VITE_API_URL` esta mal configurada o falta.
 
-```powershell
-# 1. Ver errores del backend
-docker logs --tail 50 condisabor-backend
+**Verificar:**
+1. Abre la consola del navegador (F12 → Network)
+2. Busca las peticiones a `/api/`
+3. Si van a `https://condisabor.vercel.app/api/...` → falta `VITE_API_URL`
+4. Si van a la URL de Render pero fallan → verificar que el backend este corriendo (puede estar dormido, espera ~30 seg)
 
-# 2. Probar el health check
-docker exec condisabor-backend wget -qO- http://localhost:3000/health
-```
+### El backend en Render muestra "Build failed"
 
-**Errores comunes del backend:**
+**Verificar:**
+1. Que el **Root Directory** sea `backend`
+2. Que el repositorio tenga `backend/package.json`
+3. Ver los build logs en Render → tu servicio → **Events**
 
-| Error en los logs | Causa | Solucion |
-|-------------------|-------|----------|
-| `SUPABASE_URL is required` | Falta `.env` del backend | Crear `C:\condisabor\backend\.env` (paso 5.1) |
-| `Origin bloqueado por CORS` | `ALLOWED_ORIGINS` no coincide | Verificar la IP del VPS en `backend\.env` |
-| `fetch failed` o `ECONNREFUSED` | No hay internet o Supabase esta caido | Verificar conexion a internet del VPS |
+### El frontend en Vercel muestra "Build failed"
 
-### Error "port is already allocated"
+**Verificar:**
+1. Que el **Root Directory** sea `frontend`
+2. Que las variables `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` esten configuradas
+3. Ver los build logs en Vercel para el error especifico
 
-```powershell
-# Ver que proceso usa el puerto
-netstat -ano | findstr :80
+### Login no funciona
 
-# Terminar el proceso por su PID
-Stop-Process -Id <PID> -Force
+**Verificar:**
+1. Que `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` en Vercel sean correctas
+2. En Supabase Dashboard → Authentication → URL Configuration:
+   - **Site URL** debe ser `https://condisabor.vercel.app`
+   - **Redirect URLs** debe incluir `https://condisabor.vercel.app/**`
 
-# Reiniciar los contenedores
-docker compose -f docker-compose.prod.yml up -d
-```
+### Las facturas no se marcan como vencidas automaticamente
 
-### Los contenedores dicen "unhealthy"
+El cron job de `marcarVencidas.job.js` se ejecuta dentro del proceso de Node.js en Render.
+**En el tier gratuito**, si el backend se duerme por inactividad, el cron no se ejecuta hasta que
+alguien haga una peticion y el servicio despierte.
 
-```powershell
-# Ver el detalle del health check
-docker inspect --format='{{json .State.Health}}' condisabor-backend
-docker inspect --format='{{json .State.Health}}' condisabor-frontend
-```
+**Verificar:**
+1. Que el backend este corriendo (health check OK)
+2. Revisa los logs en Render → tu servicio → **Logs**
 
-### Cambios en el .env del backend no se reflejan
-
-El backend lee el `.env` al arrancar. Si cambias valores, debes reiniciar:
-
-```powershell
-docker compose -f docker-compose.prod.yml restart backend
-```
-
-### Cambios en las variables VITE_* del frontend no se reflejan
-
-Las variables `VITE_*` se embeben en el JavaScript durante el **build**. Si cambias `C:\condisabor\.env`, debes **reconstruir**:
-
-```powershell
-docker compose -f docker-compose.prod.yml up -d --build frontend
-```
+> **Tip:** Si necesitas que el cron se ejecute siempre, puedes usar un servicio gratuito como
+> [cron-job.org](https://cron-job.org) para hacer un ping a `https://tu-backend.onrender.com/health`
+> cada 14 minutos. Esto mantiene el backend despierto y el cron activo.
 
 ---
 
-## 13. Arquitectura de red
+## 12. Limites del tier gratuito
 
-```
-                         RED VPN
-                           │
-    ┌──────────────────────┼──────────────────────┐
-    │                      │                      │
-    │   PC Usuario 1       │    PC Usuario 2      │
-    │   (navegador)        │    (navegador)       │
-    │                      │                      │
-    └──────────┬───────────┼──────────┬───────────┘
-               │                      │
-               └──────────┬───────────┘
-                          │
-                  ┌───────▼────────┐
-                  │   VPS Windows  │
-                  │  IP: 192.168.x │
-                  │   Puerto 80    │
-                  └───────┬────────┘
-                          │
-              ┌───────────▼────────────┐
-              │   Docker Network       │
-              │   (condisabor-net)     │
-              │                        │
-              │  ┌──────────────────┐  │
-              │  │    NGINX         │  │
-              │  │  (frontend)      │  │
-              │  │  Puerto 80       │  │
-              │  │                  │  │
-              │  │  /         → SPA │  │
-              │  │  /api/*   ──┐   │  │
-              │  └─────────────┼───┘  │
-              │                │      │
-              │  ┌─────────────▼───┐  │
-              │  │   EXPRESS       │  │
-              │  │  (backend)      │  │
-              │  │  Puerto 3000    │  │
-              │  │  (NO expuesto)  │  │
-              │  └────────┬────────┘  │
-              │           │           │
-              └───────────┼───────────┘
-                          │
-                          ▼
-                ┌─────────────────┐
-                │  SUPABASE CLOUD │
-                │  (PostgreSQL +  │
-                │   Auth + Storage│
-                │   + Realtime)   │
-                └─────────────────┘
-```
+| Servicio | Limite gratis | Que pasa si lo superas |
+|----------|--------------|----------------------|
+| **Vercel** | 100 GB bandwidth/mes, 6000 min build/mes | Te pide upgrade a Pro ($20/mes) |
+| **Render** | 750 hrs/mes, se duerme tras 15 min sin trafico | Puedes pagar $7/mes para que no se duerma |
+| **Supabase** | 500MB DB, 1GB storage, 50k auth users/mes | Te pide upgrade a Pro ($25/mes) |
 
-### Flujo de una peticion
-
-1. El usuario en la VPN abre `http://192.168.x.x` en su navegador
-2. Nginx recibe la peticion en el puerto 80
-3. Si la ruta es `/api/*` → Nginx la reenvia al backend Express en el puerto 3000
-4. Si es cualquier otra ruta → Nginx sirve el `index.html` de React
-5. React en el navegador hace peticiones a `/api/*` que vuelven a pasar por Nginx → Express
-6. Express se comunica con Supabase Cloud para leer/escribir datos
+Para un dashboard de facturas con pocos usuarios, estos limites **sobran de largo**. No vas a necesitar pagar en mucho tiempo.
 
 ---
 
 ## Checklist de primer despliegue
 
-Usa esta lista para no olvidar ningun paso:
-
-- [ ] Docker Desktop instalado y corriendo en el VPS
-- [ ] Git instalado en el VPS
-- [ ] Repositorio clonado en `C:\condisabor`
-- [ ] Archivo `C:\condisabor\backend\.env` creado con credenciales reales
-- [ ] Archivo `C:\condisabor\.env` creado con `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`
-- [ ] `ALLOWED_ORIGINS` en `backend\.env` tiene la IP correcta del VPS
-- [ ] `NODE_ENV=production` en `backend\.env`
-- [ ] `docker compose -f docker-compose.prod.yml up -d --build` ejecutado
-- [ ] Ambos contenedores muestran `Up (healthy)`
-- [ ] Dashboard carga en `http://<IP-VPS>` desde un PC en la VPN
+- [ ] Credenciales de Supabase anotadas (URL, anon key, service role key)
+- [ ] Backend desplegado en Render con todas las env vars
+- [ ] Health check del backend responde OK
+- [ ] Frontend desplegado en Vercel con todas las env vars
+- [ ] `ALLOWED_ORIGINS` en Render tiene el dominio de Vercel
+- [ ] `VITE_API_URL` en Vercel tiene la URL de Render
+- [ ] Site URL en Supabase actualizado al dominio de Vercel
 - [ ] Login funciona correctamente
-- [ ] Auto-inicio de Docker configurado (seccion 11)
+- [ ] Dashboard carga datos
+- [ ] Crear/editar factura funciona
+- [ ] Sin errores de CORS en consola del navegador

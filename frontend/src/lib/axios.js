@@ -1,11 +1,11 @@
 import axios from 'axios';
 import { toast } from 'sonner';
 
-// baseURL vacío → rutas relativas (/api/...).
-// En desarrollo: el proxy de Vite redirige /api → localhost:3000.
-// En producción: nginx redirige /api → contenedor backend.
+// En desarrollo: VITE_API_URL no se define → baseURL queda vacío →
+// rutas relativas (/api/...) y el proxy de Vite redirige a localhost:3000.
+// En producción (Vercel + Koyeb): VITE_API_URL apunta al backend en Koyeb.
 export const apiClient = axios.create({
-  baseURL: '',
+  baseURL: import.meta.env.VITE_API_URL || '',
   headers: { 'Content-Type': 'application/json' },
 });
 

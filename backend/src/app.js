@@ -20,6 +20,11 @@ import { errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
 
+// ── Trust proxy (necesario en Render, Railway, etc.) ────────
+// Render usa un proxy inverso que añade X-Forwarded-For.
+// Sin esto, express-rate-limit lanza un ValidationError.
+app.set('trust proxy', 1);
+
 // ── Seguridad HTTP ──────────────────────────────────────────
 // Para despliegue en red privada (VPN) sin certificados SSL:
 // - HSTS desactivado por defecto; activar solo si FORCE_HTTPS=true

@@ -6,10 +6,14 @@ import { validate } from '../middleware/validate.js';
 import {
   validarCrearPago,
   validarParamFacturaId,
+  validarAbonoGeneral,
+  validarPagoMultiple,
 } from '../validators/pagos.validators.js';
 import {
   registrarPago,
   listarPagosPorFactura,
+  abonoGeneral,
+  pagoMultiple,
 } from '../controllers/pagos.controller.js';
 
 const router = Router();
@@ -22,6 +26,26 @@ router.post(
   validarCrearPago,
   validate,
   registrarPago
+);
+
+// POST /api/pagos/abono-general
+router.post(
+  '/abono-general',
+  authenticate,
+  requireRole('admin', 'gestor'),
+  validarAbonoGeneral,
+  validate,
+  abonoGeneral
+);
+
+// POST /api/pagos/pago-multiple
+router.post(
+  '/pago-multiple',
+  authenticate,
+  requireRole('admin', 'gestor'),
+  validarPagoMultiple,
+  validate,
+  pagoMultiple
 );
 
 // GET /api/pagos/factura/:factura_id

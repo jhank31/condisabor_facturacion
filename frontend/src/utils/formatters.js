@@ -9,6 +9,28 @@ export function formatCurrency(value) {
   }).format(num);
 }
 
+/**
+ * Formats a raw numeric string into COP display format in real-time.
+ * E.g. "2500000" → "2.500.000"
+ */
+export function formatCurrencyInput(raw) {
+  if (raw == null || raw === '' || raw === '-') return '';
+  const cleaned = String(raw).replace(/[^0-9]/g, '');
+  if (!cleaned) return '';
+  const num = parseInt(cleaned, 10);
+  return num.toLocaleString('es-CO');
+}
+
+/**
+ * Parses a COP-formatted string back to a plain number.
+ * E.g. "2.500.000" → 2500000, "$1.000" → 1000
+ */
+export function parseCurrencyInput(display) {
+  if (!display) return 0;
+  const cleaned = String(display).replace(/[^0-9]/g, '');
+  return cleaned ? parseInt(cleaned, 10) : 0;
+}
+
 export function formatDate(dateStr) {
   if (!dateStr) return '—';
   const date = new Date(dateStr);

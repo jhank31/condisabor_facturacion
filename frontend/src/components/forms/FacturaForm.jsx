@@ -8,6 +8,7 @@ import { apiClient } from '../../lib/axios';
 import FileDropzone from '../ui/FileDropzone';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import Badge from '../ui/Badge';
+import CurrencyInput from '../ui/CurrencyInput';
 
 const schema = z.object({
   cliente_id: z.string().uuid('Seleccione un cliente'),
@@ -167,8 +168,20 @@ export default function FacturaForm({ onSubmit, loading }) {
           {/* Valor total */}
           <Field label="Valor total ($)" required error={errors.valor_total?.message}>
             <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-sm">$</span>
-              <input {...register('valor_total')} type="number" min="1" placeholder="0.00" className={`${inputCls} pl-8 font-bold text-lg`} />
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-sm pointer-events-none">$</span>
+              <Controller
+                name="valor_total"
+                control={control}
+                render={({ field }) => (
+                  <CurrencyInput
+                    id="factura-valor-total"
+                    value={field.value || 0}
+                    onChange={field.onChange}
+                    placeholder="0"
+                    className={`${inputCls} pl-8 font-bold text-lg`}
+                  />
+                )}
+              />
             </div>
           </Field>
 
